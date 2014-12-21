@@ -1,0 +1,125 @@
+---
+output: html_document
+---
+A comparison of impact severity for different types of storms.
+===============================================================
+
+##Synopsis
+The aim of this report is to determine which types of storms have the greatest
+impact on human health and have the greatest economic consequences. Data was 
+taken from the National Oceanic and Atmospheric Administration's (NOAA) 
+database.  This report shows that, on average, wild fires cause the most damage to human health per event.  Tornadoesresult in the greatest damage to human health overall.  For economic impact,hurricanes have the highes cost per incident, while floods have the highest cost overall.
+
+##Data Processing
+
+Data was taken from the NOAA at https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2 .  It was loaded in using:
+```{r, echo=TRUE}
+file <- read.csv("~/Coursera/repdata_data_StormData.csv.bz2")
+```
+and the following libraries were loaded:
+```{r, echo=TRUE}
+library(dplyr)
+library(lattice)
+```
+In order to determine which events had the greatest impact to human health,
+I added up all fatalities and injuries for each type of event.  I then extracted
+the top 10 events.
+```{r, echo=TRUE}
+danger_file <- filter(file, FATALITIES > 0 | INJURIES > 0)
+danger <- danger_file %>%
+        group_by(EVTYPE) %>%
+                summarise(TOTAL_FATALITIES = sum(FATALITIES),
+                          TOTAL_INJURIES = sum(INJURIES),
+                          AVG_FATALITIES = mean(FATALITIES),
+                          AVG_INJURIES = mean(INJURIES),
+                          NUMBER_OF_EVENTS = n()) %>%
+        mutate(AVG_HARM = AVG_FATALITIES + AVG_INJURIES,
+                          TOTAL_HARM = TOTAL_FATALITIES
+                                                + TOTAL_INJURIES) %>%
+        select(EVTYPE, NUMBER_OF_EVENTS, TOTAL_HARM, 
+                          AVG_HARM) %>%
+        arrange(desc(AVG_HARM))
+total_danger <- arrange(danger, desc(TOTAL_HARM))
+top_10_avg_danger <- danger[1:10, ] 
+top_10_total_danger <- total_danger[1:10, ]
+```
+
+In order to determine which events had the greatest econonomic consequences,
+I replaced all of the exponents of the PROPDMGEXP AND CROPDMGEXP columns with their numeric value (B/b = 1000000000,M/m =1000000, K/k = 1000, H/h = 100, all else = 1).  This number was then multiplied by the value given in the PROPDMG AND CROPDMG columns.  Finally, I added up all the property damage and crop damage for each type of event.  I then extracted the top 10 events.
+```{r, echo=TRUE}
+subset_file <- filter(file, PROPDMG > 0 | CROPDMG > 0)
+subset_file <- select(subset_file, EVTYPE, PROPDMG,PROPDMGEXP,
+                CROPDMG, CROPDMGEXP)
+subset_file$PROPDMGEXP <- gsub("B", 1000000000, subset_file$PROPDMGEXP, 
+                               ignore.case = TRUE)
+subset_file$PROPDMGEXP <- gsub("M", 1000000, subset_file$PROPDMGEXP, 
+                               ignore.case = TRUE)
+subset_file$PROPDMGEXP <- gsub("K", 1000, subset_file$PROPDMGEXP, 
+                               ignore.case = TRUE)
+subset_file$PROPDMGEXP <- gsub("H", 100, subset_file$PROPDMGEXP, 
+                               ignore.case = TRUE)
+subset_file$CROPDMGEXP <- gsub("B", 1000000000, subset_file$CROPDMGEXP, 
+                               ignore.case = TRUE)
+subset_file$CROPDMGEXP <- gsub("M", 1000000, subset_file$CROPDMGEXP, 
+                               ignore.case = TRUE)
+subset_file$CROPDMGEXP <- gsub("K", 1000, subset_file$CROPDMGEXP, 
+                               ignore.case = TRUE)
+subset_file$CROPDMGEXP <- gsub("H", 100, subset_file$CROPDMGEXP, 
+                               ignore.case = TRUE)
+subset_file$PROPDMGEXP <- as.numeric(subset_file$PROPDMGEXP)
+subset_file$CROPDMGEXP <- as.numeric(subset_file$CROPDMGEXP)
+subset_file[is.na(subset_file)] <- 1
+subset_file <- mutate(subset_file, EV_PROPDMG = PROPDMG*PROPDMGEXP,
+                      EV_CROPDMG = CROPDMG*CROPDMGEXP,
+                      EV_EXPENSE = EV_PROPDMG + EV_CROPDMG)
+expense <- subset_file %>%
+        group_by(EVTYPE) %>%
+                summarise(TOTAL_PROPDMG = sum(EV_PROPDMG),
+                          TOTAL_CROPDMG = sum(EV_CROPDMG),
+                          TOTAL_EXPENSE = sum(EV_EXPENSE),
+                          AVG_PROPDMG = mean(EV_PROPDMG),
+                          AVG_CROPDMG = mean(EV_CROPDMG),
+                          AVG_EXPENSE = mean(EV_EXPENSE),
+                          NUM_EV = n()) %>%
+        select(EVTYPE, NUM_EV, TOTAL_EXPENSE, AVG_EXPENSE) %>%
+        arrange(desc(AVG_EXPENSE))
+total_economic <- arrange(expense, desc(TOTAL_EXPENSE))
+top_10_avg_expense <- expense[1:10, ]
+top_10_total_expense <- total_economic[1:10, ]
+```
+
+##Results
+
+As the following chart shows, wildfires, per event, are the most dangerous type of event.  
+```{r, echo=TRUE}
+head(top_10_avg_danger, 10)
+par(mai = c(1.2,2.2,1,1))
+barplot(top_10_avg_danger$AVG_HARM, horiz = TRUE, 
+        names.arg = top_10_avg_danger$EVTYPE, col = "blue", las = 1,
+        cex.names = .5,
+        main = "Top 10 Dangerous Events by Average",
+        xlab = "Average Fatalities and Injuries")
+```
+
+
+Tornadoes, on the other hand, are the most dangerous overall.
+```{r, echo=TRUE}
+head(top_10_total_danger, 10)
+barplot(top_10_total_danger$TOTAL_HARM, horiz = TRUE, 
+        names.arg = top_10_total_danger$EVTYPE, col = "green", las = 1,
+        main = "Top 10 Dangerous Events by Total",
+        xlab = "Total Fatalities and Injuries",
+        cex.names = .5)
+```
+
+Another concern with storms is the economic impact they have. Floods were found to have the greatest overall economic impact, while hurricanes have the greatest impact per incident.
+
+```{r, echo=TRUE}
+head(top_10_total_expense)
+barplot(top_10_total_expense$TOTAL_EXPENSE, horiz = TRUE, 
+        names.arg = top_10_total_expense$EVTYPE, col = "red", las = 1,
+        main = "Top 10 Expensive Events by Total",
+        xlab = "Total Expense",
+        cex.names = .5)
+head(top_10_avg_expense)
+```
